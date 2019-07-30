@@ -38,6 +38,7 @@ class Event:
         self.all_day = True
         self.recurring = False
         self.location = None
+        self.private = False
 
     def time_left(self, time=None):
         """
@@ -114,6 +115,7 @@ class Event:
         ne.all_day = self.all_day
         ne.recurring = self.recurring
         ne.location = self.location
+        ne.private = self.private
         ne.uid = uid
 
         return ne
@@ -170,6 +172,10 @@ def create_event(component, tz=UTC):
 
     if component.get('organizer'):
         event.organizer = component.get('organizer').encode('utf-8').decode('ascii')
+
+    if component.get('class'):
+        event_class = component.get('class')
+        event.private = event_class == 'PRIVATE' or event_class == 'CONFIDENTIAL'
 
     return event
 
@@ -259,6 +265,15 @@ def parse_rrule(component, tz=UTC):
         rrules = component['rrule']
         if not isinstance(rrules, list):
             rrules = [rrules]
+
+        # Since DTSTART are always made timezone aware, UNTIL with no tzinfo
+        # must be converted to UTC.
+        for rule in rrules:
+            until = rule.get("until")
+            for idx, dt in enumerate(until or []):
+                if not hasattr(dt, 'tzinfo'):
+                    until[idx] = normalize(normalize(dt, tz=tz), tz=UTC)
+
         # Parse the rrules, might return a rruleset instance, instead of rrule
         rule = rrulestr('\n'.join(x.to_ical().decode() for x in rrules), dtstart=normalize(component['dtstart'].dt, tz=tz))
         
