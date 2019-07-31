@@ -39,6 +39,9 @@ class Event:
         self.recurring = False
         self.location = None
         self.private = False
+        self.recurrence_id = None
+        self.sequence = None
+        self.status = None
 
     def time_left(self, time=None):
         """
@@ -159,6 +162,10 @@ def create_event(component, tz=UTC):
 
     if component.get('attendee'):
         event.attendee = component.get('attendee')
+        # if "Liblit" in event.summary:
+        #     import inspect
+        #     print(inspect.getmembers(component))
+        #     print()
         if type(event.attendee) is list:
             temp = []
             for a in event.attendee:
@@ -166,6 +173,9 @@ def create_event(component, tz=UTC):
             event.attendee = temp
         else:
             event.attendee = event.attendee.encode('utf-8').decode('ascii')
+
+    if component.get('X-APPLE-EWS-BUSYSTATUS'):
+        event.status=component.get('X-APPLE-EWS-BUSYSTATUS')
 
     if component.get('uid'):
         event.uid = component.get('uid').encode('utf-8').decode('ascii')
@@ -176,6 +186,12 @@ def create_event(component, tz=UTC):
     if component.get('class'):
         event_class = component.get('class')
         event.private = event_class == 'PRIVATE' or event_class == 'CONFIDENTIAL'
+
+    if component.get('recurrence-id'):
+        event.recurrence_id = component.get('recurrence-id').dt
+
+    if component.get('sequence'):
+        event.sequence = component.get('sequence')
 
     return event
 
@@ -236,16 +252,25 @@ def parse_events(content, start=None, end=None, default_span=timedelta(days=7)):
     end = normalize(end, cal_tz)
 
     found = []
-
     for component in calendar.walk():
         if component.name == "VEVENT":
             e = create_event(component)
+            # if "Lunch" == e.summary:
+            #     print(e.summary, e.start, e.recurrence_id, (e.recurrence_id is not None and e.recurrence_id >= start- (e.end - e.start) and e.recurrence_id <= end))
             if e.recurring:
+                # print("\n", e.summary)
                 # Unfold recurring events according to their rrule
                 rule = parse_rrule(component, cal_tz)
                 dur = e.end - e.start
-                found.extend(e.copy_to(dt) for dt in rule.between(start - dur, end, inc=True))
-            elif e.end >= start and e.start <= end:
+                # found.extend(e.copy_to(dt) for dt in rule.between(start - dur, end, inc=True))
+                for dt in rule.between(start - dur, end, inc=True):
+                    ecopy = e.copy_to(dt)
+                    # print(ecopy.start.date(), [ e.date() for e in (rule._exdate if getattr(rule, "_exdate", []) else [])])
+                    if ecopy.start.date() not in [ e.date() for e in (rule._exdate if getattr(rule, "_exdate", []) else [])]:
+                        found.append(ecopy)
+                # print(len(found), [str(e.start) for e in found], "exdates: ", [ str(e) for e in (rule._exdate if getattr(rule, "_exdate", []) else [])])
+
+            elif (e.end >= start and e.start <= end) or (e.recurrence_id is not None and e.recurrence_id >= start-(e.end - e.start) and e.recurrence_id <= end):
                 found.append(e)
     return found
 
