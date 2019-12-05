@@ -4,12 +4,14 @@ Parse iCal data to Events.
 # for UID generation
 from random import randint
 from datetime import datetime, timedelta, date
+from typing import Optional
+
 from dateutil.relativedelta import relativedelta
 from dateutil.rrule import rrule, rruleset, rrulestr
 from dateutil.tz import UTC, gettz
 
 from icalendar import Calendar
-from icalendar.prop import vDDDLists
+from icalendar.prop import vDDDLists, vText
 
 
 def now():
@@ -39,6 +41,8 @@ class Event:
         self.recurring = False
         self.location = None
         self.private = False
+        self.created = None
+        self.last_modified = None
         self.recurrence_id = None
         self.sequence = None
         self.status = None
@@ -120,8 +124,19 @@ class Event:
         ne.location = self.location
         ne.private = self.private
         ne.uid = uid
+        ne.created = self.created
+        ne.last_modified = self.last_modified
 
         return ne
+
+
+def encode(value: Optional[vText]) -> Optional[str]:
+    if value is None:
+        return None
+    try:
+        return str(value)
+    except UnicodeEncodeError:
+        return str(value.encode('utf-8'))
 
 
 def create_event(component, tz=UTC):
@@ -144,21 +159,12 @@ def create_event(component, tz=UTC):
     else: # compute implicit end as start + 0
         event.end = event.start
     
-    try:
-        event.summary = str(component.get('summary'))
-    except UnicodeEncodeError as e:
-        event.summary = str(component.get('summary').encode('utf-8'))
-    try:
-        event.description = str(component.get('description'))
-    except UnicodeEncodeError as e:
-        event.description = str(component.get('description').encode('utf-8'))
+    event.summary = encode(component.get('summary'))
+    event.description = encode(component.get('description'))
     event.all_day = type(component.get('dtstart').dt) is date
     if component.get('rrule'):
         event.recurring = True
-    try:
-        event.location = str(component.get('location'))
-    except UnicodeEncodeError as e:
-        event.location = str(component.get('location').encode('utf-8'))
+    event.location = encode(component.get('location'))
 
     if component.get('attendee'):
         event.attendee = component.get('attendee')
@@ -192,6 +198,14 @@ def create_event(component, tz=UTC):
 
     if component.get('sequence'):
         event.sequence = component.get('sequence')
+
+    if component.get('created'):
+        event.created = normalize(component.get('created').dt, tz)
+
+    if component.get('last-modified'):
+        event.last_modified = normalize(component.get('last-modified').dt, tz)
+    elif event.created:
+        event.last_modified = event.created
 
     return event
 
@@ -244,7 +258,7 @@ def parse_events(content, start=None, end=None, default_span=timedelta(days=7)):
     for c in calendar.walk():
         if c.name == 'VTIMEZONE':
             cal_tz = gettz(str(c['TZID']))
-            break;
+            break
     else:
         cal_tz = UTC
 
@@ -254,7 +268,7 @@ def parse_events(content, start=None, end=None, default_span=timedelta(days=7)):
     found = []
     for component in calendar.walk():
         if component.name == "VEVENT":
-            e = create_event(component)
+            e = create_event(component, cal_tz)
             # if "Lunch" == e.summary:
             #     print(e.summary, e.start, e.recurrence_id, (e.recurrence_id is not None and e.recurrence_id >= start- (e.end - e.start) and e.recurrence_id <= end))
             if e.recurring:
