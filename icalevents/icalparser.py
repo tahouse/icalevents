@@ -8,7 +8,7 @@ from typing import Optional
 
 from dateutil.relativedelta import relativedelta
 from dateutil.rrule import rrule, rruleset, rrulestr
-from dateutil.tz import UTC, gettz
+from dateutil.tz import UTC, gettz, tzlocal
 
 from icalendar import Calendar
 from icalendar.prop import vDDDLists, vText
@@ -151,14 +151,14 @@ def create_event(component, tz=UTC):
     event = Event()
 
     event.start = normalize(component.get('dtstart').dt, tz=tz)
-    
+
     if component.get('dtend'):
         event.end = normalize(component.get('dtend').dt, tz=tz)
     elif component.get('duration'): # compute implicit end as start + duration
         event.end = event.start + component.get('duration').dt
     else: # compute implicit end as start + 0
         event.end = event.start
-    
+
     event.summary = encode(component.get('summary'))
     event.description = encode(component.get('description'))
     event.all_day = type(component.get('dtstart').dt) is date
@@ -206,6 +206,15 @@ def create_event(component, tz=UTC):
         event.last_modified = normalize(component.get('last-modified').dt, tz)
     elif event.created:
         event.last_modified = event.created
+
+    if component.get('recurrence-id'):
+        event.recurrence_id = component.get('recurrence-id').dt
+
+    if component.get('sequence'):
+        event.sequence = component.get('sequence')
+
+    if component.get('X-APPLE-EWS-BUSYSTATUS'):
+        event.status=component.get('X-APPLE-EWS-BUSYSTATUS')
 
     return event
 
@@ -260,7 +269,8 @@ def parse_events(content, start=None, end=None, default_span=timedelta(days=7)):
             cal_tz = gettz(str(c['TZID']))
             break
     else:
-        cal_tz = UTC
+        # cal_tz = UTC
+        cal_tz = tzlocal()
 
     start = normalize(start, cal_tz)
     end = normalize(end, cal_tz)
