@@ -168,10 +168,6 @@ def create_event(component, tz=UTC):
 
     if component.get('attendee'):
         event.attendee = component.get('attendee')
-        # if "Liblit" in event.summary:
-        #     import inspect
-        #     print(inspect.getmembers(component))
-        #     print()
         if type(event.attendee) is list:
             temp = []
             for a in event.attendee:
@@ -206,15 +202,6 @@ def create_event(component, tz=UTC):
         event.last_modified = normalize(component.get('last-modified').dt, tz)
     elif event.created:
         event.last_modified = event.created
-
-    if component.get('recurrence-id'):
-        event.recurrence_id = component.get('recurrence-id').dt
-
-    if component.get('sequence'):
-        event.sequence = component.get('sequence')
-
-    if component.get('X-APPLE-EWS-BUSYSTATUS'):
-        event.status=component.get('X-APPLE-EWS-BUSYSTATUS')
 
     return event
 
