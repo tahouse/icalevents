@@ -10,7 +10,7 @@ from dateutil.relativedelta import relativedelta
 from dateutil.rrule import rrule, rruleset, rrulestr
 from dateutil.tz import UTC, gettz, tzlocal
 
-from icalendar import Calendar
+from icalendar import Calendar, Alarm
 from icalendar.prop import vDDDLists, vText
 
 
@@ -46,6 +46,7 @@ class Event:
         self.recurrence_id = None
         self.sequence = None
         self.status = None
+        self.alarms = []
 
     def time_left(self, time=None):
         """
@@ -126,6 +127,9 @@ class Event:
         ne.uid = uid
         ne.created = self.created
         ne.last_modified = self.last_modified
+        
+        ne.alarms = self.alarms
+
 
         return ne
 
@@ -202,6 +206,20 @@ def create_event(component, tz=UTC):
         event.last_modified = normalize(component.get('last-modified').dt, tz)
     elif event.created:
         event.last_modified = event.created
+
+    for i, subcomponent in enumerate(component.subcomponents):
+        if isinstance(subcomponent, Alarm):
+            if subcomponent.get('trigger'):
+                trigger = subcomponent.get('trigger')
+                if isinstance(trigger.dt, datetime):
+                    if trigger.dt < now():
+                        # print(i, event.summary, trigger.dt)
+                        # just ignore it -- a lot are 19760401T005545Z
+                        continue
+                    else:
+                        raise NotImplementedError
+                elif isinstance(trigger.dt, timedelta):
+                    event.alarms.append(trigger.dt)
 
     return event
 
